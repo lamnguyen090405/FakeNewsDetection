@@ -37,7 +37,7 @@ pip-log.txt
 pip-delete-this-directory.txt
 
 # Ignore big CSV files
-Data/*.csv
+/Data/*.csv
 
 # Unit test / coverage reports
 htmlcov/

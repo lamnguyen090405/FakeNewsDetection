@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Phân Loại Báo Chí</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        /* --- 1. RESET & BACKGROUND --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Roboto', sans-serif; }
+
+        body {
+            /* Gradient Xanh Dương Đậm Chất Công Nghệ */
+            background: linear-gradient(120deg, #155799, #159957); /* Xanh biển pha chút xanh lá hiện đại */
+            background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%); /* Hoặc dùng thuần xanh dương này */
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        /* --- 2. THẺ CARD CHÍNH (GLASSMORPHISM) --- */
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            width: 100%;
+            max-width: 550px;
+            padding: 40px;
+            border-radius: 20px;
+            /* Đổ bóng 3D */
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255,255,255,0.5);
+            animation: floatUp 0.8s ease-out;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Trang trí background ẩn */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: -50px; left: -50px;
+            width: 150px; height: 150px;
+            background: rgba(0, 114, 255, 0.1);
+            border-radius: 50%;
+            z-index: 0;
+        }
+
+        /* --- 3. HEADER --- */
+        h1 {
+            text-align: center;
+            color: #005bea;
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            z-index: 1;
+        }
+
+        h1 i { margin-right: 10px; }
+
+        /* --- 4. FORM INPUTS --- */
+        .input-group { margin-bottom: 20px; position: relative; z-index: 1; }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 15px;
+            outline: none;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: #f8f9fa;
+        }
+
+        textarea { resize: vertical; min-height: 120px; }
+
+        /* Hiệu ứng Focus cực đẹp */
+        input:focus, select:focus, textarea:focus {
+            border-color: #0072ff;
+            background: #fff;
+            box-shadow: 0 0 0 4px rgba(0, 114, 255, 0.15); /* Vòng sáng xanh */
+            transform: translateY(-2px);
+        }
+
+        /* --- 5. NÚT BẤM (BUTTON) --- */
+        button {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 50px;
+            /* Gradient Nút Bấm */
+            background: linear-gradient(90deg, #0072ff 0%, #00c6ff 100%);
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: 0.3s;
+            box-shadow: 0 10px 20px rgba(0, 114, 255, 0.3);
+            position: relative;
+            overflow: hidden;
+            z-index: 1;
+        }
+
+        /* Hiệu ứng Hover nút */
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 25px rgba(0, 114, 255, 0.4);
+        }
+
+        button:active { transform: scale(0.98); }
+
+        button:disabled {
+            background: #bdc3c7;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+
+        /* --- 6. PHẦN KẾT QUẢ --- */
+        #result-area {
+            margin-top: 30px;
+            display: none;
+            text-align: center;
+            animation: popIn 0.5s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+        }
+
+        .result-box {
+            background: #e3f2fd; /* Xanh nhạt */
+            padding: 20px;
+            border-radius: 15px;
+            border-left: 5px solid #0072ff;
+            color: #0d47a1;
+        }
+
+        .result-title { font-size: 14px; opacity: 0.8; margin-bottom: 5px; }
+        
+        .result-value {
+            font-size: 26px;
+            font-weight: 800;
+            color: #005bea;
+            margin-bottom: 5px;
+        }
+
+        .confidence-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            background: #0072ff;
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        /* --- 7. ANIMATIONS --- */
+        @keyframes floatUp { from { opacity: 0; transform: translateY(50px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+        
+        /* Spinner Loading */
+        .spinner {
+            display: none;
+            width: 20px; height: 20px;
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 0.8s linear infinite;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1><i class="fas fa-newspaper"></i> Phân Loại Tin Tức</h1>
+        
+        <form id="newsForm">
+            <div class="input-group">
+                <label>Nguồn Báo</label>
+                <select id="source">
+                    <option value="VnExpress">VnExpress</option>
+                    <option value="Dân Trí">Dân Trí</option>
+                    <option value="Tuổi Trẻ">Tuổi Trẻ</option>
+                    <option value="Thanh Niên">Thanh Niên</option>
+                    <option value="Khác">Khác</option>
+                </select>
+            </div>
+
+            <div class="input-group">
+                <label>Tiêu Đề Bài Viết</label>
+                <input type="text" id="title" placeholder="Nhập tiêu đề tại đây..." required autocomplete="off">
+            </div>
+
+            <div class="input-group">
+                <label>Nội Dung Chi Tiết</label>
+                <textarea id="content" placeholder="Paste nội dung bài báo vào đây..." required></textarea>
+            </div>
+
+            <button type="submit" id="btnPredict">
+                <span class="spinner" id="loadingSpinner"></span>
+                <span id="btnText">Dự Đoán Ngay <i class="fas fa-arrow-right" style="margin-left:5px;"></i></span>
+            </button>
+        </form>
+
+        <div id="result-area">
+            <div class="result-box">
+                <div class="result-title">AI DỰ ĐOÁN CHỦ ĐỀ LÀ:</div>
+                <div class="result-value" id="resultLabel">...</div>
+                <div class="confidence-badge" id="confidenceLabel">...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('newsForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            // UI Elements
+            const btn = document.getElementById('btnPredict');
+            const btnText = document.getElementById('btnText');
+            const spinner = document.getElementById('loadingSpinner');
+            const resultArea = document.getElementById('result-area');
+            const resultLabel = document.getElementById('resultLabel');
+            const confidenceLabel = document.getElementById('confidenceLabel');
+
+            // Set Loading State
+            btn.disabled = true;
+            spinner.style.display = 'inline-block';
+            btnText.innerHTML = 'Đang Phân Tích...';
+            resultArea.style.display = 'none';
+
+            // Data Payload
+            const payload = {
+                source: document.getElementById('source').value,
+                title: document.getElementById('title').value,
+                content: document.getElementById('content').value
+            };
+
+            try {
+                // Giả lập delay 0.5s để hiệu ứng loading mượt hơn
+                await new Promise(r => setTimeout(r, 500));
+
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    resultLabel.innerText = data.prediction;
+                    confidenceLabel.innerText = "Độ tin cậy: " + data.confidence;
+                    resultArea.style.display = 'block';
+                } else {
+                    alert('Lỗi: ' + data.message);
+                }
+
+            } catch (error) {
+                console.error(error);
+                alert('Mất kết nối tới Server!');
+            } finally {
+                // Reset State
+                btn.disabled = false;
+                spinner.style.display = 'none';
+                btnText.innerHTML = 'Dự Đoán Ngay <i class="fas fa-arrow-right" style="margin-left:5px;"></i>';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -2,6 +2,7 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
+from collections import Counter
 from pydantic import BaseModel
 import numpy as np
 import joblib
@@ -19,7 +20,7 @@ MODEL_PATH = 'vinai/phobert-base' # Load Online từ HuggingFace
 
 # --- 1. ĐỊNH NGHĨA DỮ LIỆU ĐẦU VÀO ---
 class NewsInput(BaseModel):
-    source: str
+    # Đã xóa source: str
     title: str
     content: str
 
@@ -41,11 +42,11 @@ def load_stopwords_global():
                         STOPWORDS.add(word)
                         # Thêm cả biến thể có gạch dưới (cho underthesea)
                         STOPWORDS.add(word.replace(' ', '_'))
-            print(f"✅ Đã tải {len(STOPWORDS)} từ dừng.")
+            print(f"Đã tải {len(STOPWORDS)} từ dừng.")
         else:
-            print(f"⚠️ Cảnh báo: Không tìm thấy file '{STOPWORDS_FILE}'. Bỏ qua bước lọc stopword.")
+            print(f"Cảnh báo: Không tìm thấy file '{STOPWORDS_FILE}'. Bỏ qua bước lọc stopword.")
     except Exception as e:
-        print(f"❌ Lỗi khi đọc stopwords: {e}")
+        print(f"Lỗi khi đọc stopwords: {e}")
 
 def text_preprocess(text):
     """
@@ -107,7 +108,7 @@ def get_embeddings(text_list, max_len=256):
 # --- 4. LIFESPAN (QUẢN LÝ KHỞI ĐỘNG SERVER) ---
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("\n⏳ Đang khởi động Server & Tải Models...")
+    print("\nĐang khởi động Server & Tải Models...")
     
     # 1. Load Stopwords
     load_stopwords_global()
@@ -116,14 +117,14 @@ async def lifespan(app: FastAPI):
     try:
         ml_models['le'] = joblib.load('models/label_encoder.pkl')
         ml_models['mlp'] = joblib.load('models/news_classifier_mlp.pkl')
-        print("✅ Đã tải MLP Model & Label Encoder.")
+        print("Đã tải MLP Model & Label Encoder.")
     except Exception as e:
-        print(f"❌ Lỗi tải file .pkl: {e}")
-        print("💡 Gợi ý: Kiểm tra xem file đã nằm trong thư mục 'models/' chưa?")
+        print(f"Lỗi tải file .pkl: {e}")
+        print("Gợi ý: Kiểm tra xem file đã nằm trong thư mục 'models/' chưa?")
 
     # 3. Load PhoBERT (Online)
     try:
-        print(f"⏳ Đang tải PhoBERT từ {MODEL_PATH} (có thể mất 30s)...")
+        print(f"Đang tải PhoBERT từ {MODEL_PATH} (có thể mất 30s)...")
         ml_models['tokenizer'] = AutoTokenizer.from_pretrained(MODEL_PATH, use_fast=True)
         ml_models['bert'] = AutoModel.from_pretrained(MODEL_PATH)
         
@@ -132,9 +133,9 @@ async def lifespan(app: FastAPI):
         ml_models['device'] = device
         print(f"✅ Đã tải xong PhoBERT (Device: {device})")
     except Exception as e:
-        print(f"❌ Lỗi tải PhoBERT: {e}")
+        print(f"Lỗi tải PhoBERT: {e}")
 
-    print("🚀 Server đã sẵn sàng!\n")
+    print("Server đã sẵn sàng!\n")
     yield
     # Dọn dẹp khi tắt
     ml_models.clear()
@@ -152,40 +153,42 @@ async def home(request: Request):
 async def predict(data: NewsInput):
     """API Dự đoán chính"""
     try:
-        # 1. Tiền xử lý dữ liệu (Pre-processing)
-        # Quan trọng: Phải làm sạch Title và Content trước khi đưa vào PhoBERT
+        # 1. Tiền xử lý dữ liệu
         clean_title = text_preprocess(data.title)
-        clean_content = text_preprocess(data.content)
+        clean_content = text_preprocess(data.content) # Đây là chuỗi text đã bỏ stopword
+
+        # --- LOGIC MỚI: TÌM TỪ KHÓA ---
+        # Gộp cả tiêu đề và nội dung để tìm từ khóa
+        full_text = clean_title + " " + clean_content
+        words = full_text.split()
+        
+        # Đếm tần suất và lấy 10 từ phổ biến nhất
+        most_common = Counter(words).most_common(10)
+        keywords = [word for word, count in most_common] 
+        # ------------------------------
 
         # 2. Feature Engineering
-        # Token count: Tính trên nội dung gốc (theo logic manual test cũ)
         token_count = len(data.content.split())
-        
-        # Embeddings: Tính trên nội dung ĐÃ LÀM SẠCH
         title_emb = get_embeddings([clean_title], max_len=64)
         content_emb = get_embeddings([clean_content], max_len=256)
-        
-        # Source Hash: Logic cũ
-        source_feat = np.array([[hash(data.source) % 1000]])
         token_feat = np.array([[token_count]])
         
-        # 3. Gộp features (Stacking)
-        full_features = np.hstack([title_emb, content_emb, source_feat, token_feat])
+        # 3. Gộp features
+        full_features = np.hstack([title_emb, content_emb, token_feat])
         
-        # 4. Dự đoán (Inference)
+        # 4. Dự đoán
         mlp = ml_models['mlp']
         le = ml_models['le']
         
         pred_idx = mlp.predict(full_features)[0]
         label = le.inverse_transform([pred_idx])[0]
-        
-        # Tính xác suất tin cậy (Confidence score)
         pred_proba = mlp.predict_proba(full_features).max()
         
         return {
             "status": "success",
             "prediction": label,
-            "confidence": f"{pred_proba*100:.2f}%"
+            "confidence": f"{pred_proba*100:.2f}%",
+            "keywords": keywords  # <--- Gửi thêm cái này về Frontend
         }
 
     except Exception as e:
@@ -193,5 +196,4 @@ async def predict(data: NewsInput):
 
 # --- 6. CHẠY SERVER ---
 if __name__ == '__main__':
-    # Lưu ý: Khi chạy file này trực tiếp, không dùng reload để tránh lỗi Windows
     uvicorn.run(app, host="127.0.0.1", port=8000)

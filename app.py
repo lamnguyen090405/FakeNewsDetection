@@ -17,7 +17,7 @@ import os
 # --- CẤU HÌNH ---
 STOPWORDS_FILE = 'vietnamese-stopwords.txt'
 MODEL_PATH = 'vinai/phobert-base'
-MLP_MODEL_PATH = 'models/news_classifier_mlp_optimized.pkl' 
+MLP_MODEL_PATH = 'models/news_classifier_mlp.pkl' 
 LE_MODEL_PATH = 'models/label_encoder.pkl'
 
 # --- ĐỊNH NGHĨA DỮ LIỆU ---
